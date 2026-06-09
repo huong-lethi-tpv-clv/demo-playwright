@@ -1,0 +1,239 @@
+name: E2E Tests - Playwright + Cucumber
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      browser:
+        description: 'Browser to test'
+        required: false
+        default: 'chromium'
+        type: choice
+        options:
+          - chromium
+          - firefox
+      tags:
+        description: 'Cucumber tags filter (e.g., @smoke)'
+        required: false
+        default: ''
+      parallel:
+        description: 'Enable parallel execution'
+        required: false
+        default: true
+        type: boolean
+      parallel_workers:
+        description: 'Number of parallel workers (2-4 recommended)'
+        required: false
+        default: '2'
+        type: choice
+        options:
+          - '1'
+          - '2'
+          - '3'
+          - '4'
+
+env:
+  BROWSER: ${{ github.event.inputs.browser || 'chromium' }}
+  NODE_VERSION: '22'
+  ARTIFACT_RETENTION_DAYS: 30
+  PARALLEL_WORKERS: ${{ github.event.inputs.parallel_workers || '2' }}
+
+jobs:
+  test:
+    name: Run E2E Tests
+    runs-on: om-com-runner
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Cache node modules
+        id: cache-npm
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        if: steps.cache-npm.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Verify dependencies (if cached)
+        if: steps.cache-npm.outputs.cache-hit == 'true'
+        run: |
+          echo "✅ Using cached dependencies"
+          npm list --depth=0 || npm ci
+
+      - name: Get Playwright version
+        id: playwright-version
+        run: echo "version=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")" >> $GITHUB_OUTPUT
+
+      - name: Cache Playwright browsers
+        id: cache-playwright
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}-${{ env.BROWSER }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}-
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright browsers
+        if: steps.cache-playwright.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps ${{ env.BROWSER }}
+
+      - name: Verify Playwright browsers (if cached)
+        if: steps.cache-playwright.outputs.cache-hit == 'true'
+        run: |
+          echo "✅ Using cached Playwright browsers"
+          npx playwright install-deps ${{ env.BROWSER }}
+
+      - name: Ensure reports directory exists
+        run: mkdir -p reports
+
+      - name: Run E2E tests
+        id: tests
+        run: |
+          PARALLEL="${{ github.event.inputs.parallel || 'true' }}"
+          PROFILE="${{ env.BROWSER }}$( [ "$PARALLEL" = "true" ] && echo ':parallel' || echo '' )"
+          TAGS="${{ github.event.inputs.tags }}"
+          
+          npm run test:$PROFILE $( [ -n "$TAGS" ] && echo "-- --tags \"$TAGS\"" || echo "" )
+        env:
+          # Application URL
+          BASE_URL: ${{ vars.BASE_URL }}
+          # Test Configuration
+          HEADLESS: true
+          CI: true
+          BROWSER: ${{ env.BROWSER }}
+          TIMEOUT: ${{ vars.TIMEOUT || '60000' }}
+          PARALLEL_WORKERS: ${{ env.PARALLEL_WORKERS }}
+          # Screenshots
+          SCREENSHOT_PATH: "./reports/screenshots"
+          # Test Credentials
+          E2E_USER: ${{ vars.E2E_USER }}
+          E2E_PASS: ${{ secrets.E2E_PASS }}
+        continue-on-error: true
+
+      - name: Generate HTML Report
+        if: always()
+        run: npm run report
+
+      - name: Debug - List report files
+        if: always()
+        run: |
+          echo "📂 Current directory: $(pwd)"
+          echo "📂 Listing reports directory:"
+          ls -la reports/ || echo "reports/ directory not found"
+          echo ""
+          echo "📂 Looking for XML files:"
+          find . -name "*.xml" -type f || echo "No XML files found"
+
+      - name: Check test results
+        if: always()
+        id: test-status
+        continue-on-error: true
+        run: |
+          REPORT="reports/junit-report.xml"
+          [ ! -f "$REPORT" ] && REPORT=$(find . -name "junit-report.xml" -type f | head -1)
+          
+          if [ -f "$REPORT" ]; then
+            TESTS=$(sed -n 's/.*tests="\([^"]*\)".*/\1/p' "$REPORT" | head -1)
+            FAILURES=$(sed -n 's/.*failures="\([^"]*\)".*/\1/p' "$REPORT" | head -1)
+            ERRORS=$(sed -n 's/.*errors="\([^"]*\)".*/\1/p' "$REPORT" | head -1)
+            
+            TESTS=${TESTS:-0}
+            FAILURES=${FAILURES:-0}
+            ERRORS=${ERRORS:-0}
+            PASSED=$((TESTS - FAILURES - ERRORS))
+            
+            {
+              echo "total-tests=$TESTS"
+              echo "failures=$FAILURES"
+              echo "errors=$ERRORS"
+            } >> $GITHUB_OUTPUT
+            
+            echo "📊 Test Summary: $TESTS tests | ✅ $PASSED passed | ❌ $FAILURES failed | 🔥 $ERRORS errors"
+            
+            if [ "$FAILURES" != "0" ] || [ "$ERRORS" != "0" ]; then
+              echo "status=failed" >> $GITHUB_OUTPUT
+              echo "⚠️ Tests failed - continuing to upload reports and sync to Xray"
+              exit 1
+            else
+              echo "status=passed" >> $GITHUB_OUTPUT
+              echo "✅ All tests passed!"
+            fi
+          else
+            echo "❌ JUnit report not found"
+            echo "status=error" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            reports/
+            !reports/.gitkeep
+          retention-days: ${{ env.ARTIFACT_RETENTION_DAYS }}
+
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-screenshots
+          path: reports/screenshots/
+          retention-days: 7
+
+  sync-to-xray:
+    name: Sync Results to Xray
+    needs: test
+    if: always() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    runs-on: om-com-runner
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download test results
+        uses: actions/download-artifact@v4
+        with:
+          name: test-results
+          path: ./reports
+
+      - name: Sync to Xray Cloud
+        id: xray
+        uses: ./.github/actions/xray-sync
+        with:
+          xray-base-url: ${{ vars.XRAY_BASE_URL }}
+          xray-client-id: ${{ secrets.XRAY_CLIENT_ID }}
+          xray-client-secret: ${{ secrets.XRAY_CLIENT_SECRET }}
+          project-key: ${{ vars.PROJECT_KEY }}
+          test-plan-key: ${{ vars.TEST_PLAN_KEY }}
+          report-path: './reports/junit-report.xml'
+          max-retries: 3
+          retry-delay: 5
+
+      - name: Upload Xray response artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xray-sync-response
+          path: /tmp/xray_response.json
+          retention-days: 7
+          if-no-files-found: ignore

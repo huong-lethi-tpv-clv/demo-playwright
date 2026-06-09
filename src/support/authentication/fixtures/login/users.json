@@ -1,0 +1,12 @@
+{
+  "creator": {
+    "username": "",
+    "password": "",
+    "description": "Invoice creator role — set E2E_USER/E2E_PASS in .env"
+  },
+  "approver": {
+    "username": "",
+    "password": "",
+    "description": "Invoice approver role"
+  }
+}

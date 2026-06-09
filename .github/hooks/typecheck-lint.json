@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {
+        "type": "command",
+        "bash": "./scripts/hooks/typecheck-lint.sh",
+        "timeoutSec": 180
+      }
+    ]
+  }
+}

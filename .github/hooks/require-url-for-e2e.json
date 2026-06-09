@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "userPromptSubmitted": [
+      {
+        "type": "command",
+        "bash": "./scripts/hooks/require-url-for-e2e.sh",
+        "timeoutSec": 5
+      }
+    ]
+  }
+}

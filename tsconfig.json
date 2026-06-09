@@ -1,0 +1,49 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "lib": ["ES2022", "dom"],
+    "outDir": "./dist",
+    "rootDir": "./",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "types": ["node", "@playwright/test"],
+    "allowSyntheticDefaultImports": true,
+    "sourceMap": true,
+    "ignoreDeprecations": "5.0",
+    "baseUrl": "./",
+    "paths": {
+      "@support": ["src/support"],
+      "@support/*": ["src/support/*"],
+      "@support/shared": ["src/support/shared"],
+      "@support/shared/*": ["src/support/shared/*"],
+      "@pages": ["src/pages"],
+      "@pages/*": ["src/pages/*"],
+      "@config": ["src/config"],
+      "@config/*": ["src/config/*"],
+      "@tests": ["src/tests"],
+      "@tests/*": ["src/tests/*"],
+      "@utils": ["src/utils"],
+      "@utils/*": ["src/utils/*"]
+    }
+  },
+  "include": [
+    "src/**/*",
+    "features/**/*",
+    "playwright.config.ts",
+    "scripts/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "reports"
+  ],
+  "ts-node": {
+    "transpileOnly": true,
+    "files": true
+  }
+}

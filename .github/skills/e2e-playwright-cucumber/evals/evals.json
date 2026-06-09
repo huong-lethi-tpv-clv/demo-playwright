@@ -1,0 +1,29 @@
+{
+  "skill_name": "e2e-playwright-cucumber",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Add a Cucumber scenario and page object for a password reset flow. The user navigates to /forgot-password, enters their email, submits, and sees a 'Check your email' confirmation. Use our existing project conventions.",
+      "expected_output": "A new .feature file under src/tests/authentication/password-reset/ with Given/When/Then scenarios, a matching .steps.ts file, a PasswordResetPage extending BasePage using getByRole locators, and appropriate tagging (likely @skip-auto-login since the user isn't logged in).",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Update the existing login test to also verify that an error message appears when the user enters invalid credentials. The test file lives at src/tests/login/successful-login.feature and there's already a LoginPage with a submitWithCredentials method.",
+      "expected_output": "Either a new scenario added to the existing feature file, or a new scenario file for the invalid-credentials flow. LoginPage should be extended (not duplicated) with a method to read the error message, using getByRole or getByText. No new CSS selectors. Reuses existing fixtures.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "I need a quick test. Here's what I want:\n\ntest('logout works', async () => {\n  await page.click('.user-menu-btn');\n  await page.click('.logout-link');\n  expect(await page.textContent('h1')).toBe('Login');\n});\n\nAdd this to the test suite.",
+      "expected_output": "The skill should recognize this is Playwright-test style, not Cucumber, and this project uses BDD. It should refuse the raw format and instead propose: a Gherkin scenario under src/tests/authentication/logout/, a LogoutPage (or reusing an existing header/nav page object) with getByRole locators, proper step definitions, and tagging. It should NOT silently paste the raw code into a .spec.ts file.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Add an E2E test that checks a user can log out. Call it logout.spec.ts and put it in a new top-level tests-e2e/ folder so it's easy to find.",
+      "expected_output": "The skill should push back on the naming and location. It should explain: tests go in src/tests/<domain>/<feature>/, files end in .feature + .steps.ts (not .spec.ts), and the logout feature belongs under an authentication or session domain. It should then create the correct structure instead of following the user's incorrect suggestion verbatim.",
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "skill_name": "e2e-test-data-strategy",
+  "evals": [
+    {
+      "id": 1,
+      "name": "admin-deletes-user-persists",
+      "prompt": "I need to add an e2e scenario for user-management: an admin deletes a user, then reloads the page, and the user must still be gone. We have a backend, just tell me how to set this up in this repo.",
+      "expected_strategy": "API seeding",
+      "expected_output": "Recommends §4.3 API seeding: new seeder under src/support/user-management/seeders/, uses APIRequestContext, names entity e2e-<runId>-*, tracks IDs on CustomWorld.seededEntities, cleans up in After hook. Does NOT recommend mocking, because the assertion is real persistence across reload.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "empty-state-mock",
+      "prompt": "Can you add a cucumber scenario that shows the empty state message on the user list page when the API returns zero records? I don't want to touch the real backend for this.",
+      "expected_strategy": "mock",
+      "expected_output": "Recommends §4.4 mock: extend GraphQLMockBase with a user-management mock, payload loaded from fixture (e.g. list-empty.json), registered in a Before hook or Given step. Points to existing src/support/user-management/mocks/user-management.mock.ts and src/support/user-management/fixtures/users/list-empty.json.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "pagination-25-unique-users",
+      "prompt": "I want a test that verifies the user list pagination works with 25 users. Each user should have a different name and email. No need to actually create them in the backend.",
+      "expected_strategy": "builder+faker (payload) + mock (wire-up)",
+      "expected_output": "Recommends §4.2 builder+faker to generate 25 unique users (uniqueSuffix / buildUniqueEmail, global FAKER_SEED for determinism), combined with §4.4 mock to return those generated users as the API response. Does NOT recommend seeding (no backend persistence needed) and does NOT recommend a static fixture (varied data).",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "login-locked-account",
+      "prompt": "Add a login scenario for a locked-out account that sees the 'Your account is locked' error message.",
+      "expected_strategy": "static fixture",
+      "expected_output": "Recommends §4.1 static fixture: reuse or extend src/support/authentication/fixtures/login/users.json with a lockedUser entry, load via FixtureLoader.loadUserCredentials('lockedUser'). Credentials are stable, committed, reference-like.",
+      "files": []
+    }
+  ]
+}

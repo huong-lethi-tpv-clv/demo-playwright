@@ -1,0 +1,71 @@
+{
+  "name": "om-apm-playwright",
+  "version": "1.0.0",
+  "description": "APM E2E Testing with Playwright",
+  "main": "index.js",
+  "scripts": {
+    "bddgen": "bddgen test",
+    "test": "yarn bddgen && playwright test",
+    "test:ui": "yarn bddgen && playwright test --ui",
+    "test:headed": "yarn bddgen && playwright test --headed",
+    "test:debug": "yarn bddgen && playwright test --debug",
+    "test:chromium": "yarn bddgen && playwright test --project=chromium",
+    "test:parallel": "yarn bddgen && playwright test --workers=2",
+    "test:tags": "yarn bddgen && playwright test --grep",
+    "test:headedpo": "yarn bddgen && playwright test --headed --grep",
+    "test:codegen": "playwright codegen",
+    "test:report": "playwright show-report reports/playwright-html-report",
+    "report": "playwright show-report reports/playwright-html-report",
+    "allure:generate": "allure generate --output allure-report allure-results",
+    "allure:clean": "rm -rf allure-results allure-report",
+    "allure:open": "allure open allure-report",
+    "allure:serve": "allure generate --output allure-report allure-results && allure open allure-report",
+    "clean": "rm -rf reports/* .tmp/* test-results/* .features-gen allure-results allure-report",
+    "lint": "eslint 'src/**/*.ts'",
+    "lint:fix": "eslint 'src/**/*.ts' --fix",
+    "format": "prettier --write 'src/**/*.ts'",
+    "typecheck": "tsc --noEmit --pretty",
+    "prepare": "husky"
+  },
+  "keywords": [
+    "playwright",
+    "playwright-bdd",
+    "e2e",
+    "testing",
+    "typescript",
+    "bdd"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": ">=1.47.0 <1.60.0",
+    "@types/lodash": "^4.17.7",
+    "@types/node": "^22.5.5",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "allure-playwright": "^3.4.3",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-import-resolver-typescript": "^3.6.1",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-prettier": "^5.1.3",
+    "husky": "^9.1.5",
+    "lint-staged": "^15.2.10",
+    "playwright-bdd": "^8.4.2",
+    "prettier": "^3.2.5",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "axios": "^1.13.2",
+    "dotenv": "^16.4.5",
+    "lodash": "^4.17.21",
+    "xlsx": "^0.18.5"
+  },
+  "lint-staged": {
+    "src/**/*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ]
+  }
+}

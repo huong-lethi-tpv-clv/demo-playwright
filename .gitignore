@@ -1,0 +1,68 @@
+node_modules/
+dist/
+reports/
+.tmp/
+.env
+.DS_Store
+coverage/
+# Dependencies
+node_modules/
+bun.lockb
+# Claude Code - track commands, ignore settings
+.claude/settings*
+
+# Agent Artifacts - track knowledge base, ignore sessions
+.agent-artifacts/sessions/*
+!.agent-artifacts/sessions/.gitkeep
+
+# Keep package-lock.json for npm consistency
+# package-lock.json
+
+# Build outputs
+dist/
+.tmp/
+
+# Test reports
+reports/
+test-results/
+*.log
+
+# Environment variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+*.bak
+.docs
+
+# Playwright
+playwright-report/
+playwright/.cache/
+playwright/.auth/
+.playwright-mcp/
+
+# Generated BDD specs
+.features-gen/
+
+# Allure
+allure-results/*
+allure-report/
+.allure
+
+# GitHub agent artifacts
+.github/agents
+
+skills-lock.json
+
+.agent-artifacts/archived/
+.agent-artifacts/sessions/
+.agent-artifacts/active-session.json

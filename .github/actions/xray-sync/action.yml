@@ -1,0 +1,333 @@
+name: 'Sync Test Results to Xray Cloud'
+description: 'Authenticate and upload JUnit test results to Xray Cloud with retry logic and robust error handling'
+author: 'DevOps Team'
+
+inputs:
+  xray-base-url:
+    description: 'Xray Cloud base URL'
+    required: true
+    default: 'https://xray.cloud.getxray.app'
+  xray-client-id:
+    description: 'Xray API client ID'
+    required: true
+  xray-client-secret:
+    description: 'Xray API client secret'
+    required: true
+  project-key:
+    description: 'Jira project key (e.g., COM, CHORUS)'
+    required: true
+  test-plan-key:
+    description: 'Xray test plan key (optional, e.g., COM-1234)'
+    required: false
+    default: ''
+  report-path:
+    description: 'Path to JUnit XML report file'
+    required: true
+    default: './reports/junit-report.xml'
+  max-retries:
+    description: 'Maximum retry attempts for API calls'
+    required: false
+    default: '3'
+  retry-delay:
+    description: 'Delay between retries in seconds'
+    required: false
+    default: '5'
+
+outputs:
+  test-execution-key:
+    description: 'Created test execution key in Xray (e.g., COM-5678)'
+    value: ${{ steps.upload.outputs.execution_key }}
+  test-execution-id:
+    description: 'Test execution issue ID'
+    value: ${{ steps.upload.outputs.execution_id }}
+  upload-status:
+    description: 'Upload status (success/failed)'
+    value: ${{ steps.upload.outputs.status }}
+  auth-status:
+    description: 'Authentication status (success/failed)'
+    value: ${{ steps.auth.outputs.status }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Validate inputs
+      shell: bash
+      run: |
+        echo "🔍 Validating inputs..."
+        
+        # Validate report file exists
+        if [ ! -f "${{ inputs.report-path }}" ]; then
+          echo "❌ ERROR: JUnit report not found at: ${{ inputs.report-path }}"
+          echo "📂 Current directory contents:"
+          ls -la $(dirname "${{ inputs.report-path }}")
+          exit 1
+        fi
+        
+        # Validate report is not empty
+        if [ ! -s "${{ inputs.report-path }}" ]; then
+          echo "❌ ERROR: JUnit report is empty: ${{ inputs.report-path }}"
+          exit 1
+        fi
+        
+        # Validate required inputs
+        if [ -z "${{ inputs.xray-client-id }}" ]; then
+          echo "❌ ERROR: xray-client-id is required"
+          exit 1
+        fi
+        
+        if [ -z "${{ inputs.xray-client-secret }}" ]; then
+          echo "❌ ERROR: xray-client-secret is required"
+          exit 1
+        fi
+        
+        if [ -z "${{ inputs.project-key }}" ]; then
+          echo "❌ ERROR: project-key is required"
+          exit 1
+        fi
+        
+        echo "✅ All inputs validated successfully"
+        echo "📄 Report file: ${{ inputs.report-path }}"
+        echo "📊 Report size: $(wc -c < "${{ inputs.report-path }}") bytes"
+        echo "🔑 Project key: ${{ inputs.project-key }}"
+        if [ -n "${{ inputs.test-plan-key }}" ]; then
+          echo "📋 Test plan: ${{ inputs.test-plan-key }}"
+        fi
+
+    - name: Authenticate to Xray Cloud
+      id: auth
+      shell: bash
+      run: |
+        echo "🔐 Authenticating to Xray Cloud..."
+        echo "🌐 Base URL: ${{ inputs.xray-base-url }}"
+        
+        MAX_RETRIES=${{ inputs.max-retries }}
+        RETRY_DELAY=${{ inputs.retry-delay }}
+        RETRY_COUNT=0
+        AUTH_SUCCESS=false
+        
+        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+          ATTEMPT=$((RETRY_COUNT + 1))
+          echo ""
+          echo "🔄 Authentication attempt $ATTEMPT of $MAX_RETRIES..."
+          
+          # Make authentication request
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            "${{ inputs.xray-base-url }}/api/v2/authenticate" \
+            -H "Content-Type: application/json" \
+            -d "{\"client_id\":\"${{ inputs.xray-client-id }}\",\"client_secret\":\"${{ inputs.xray-client-secret }}\"}" \
+            2>&1)
+          
+          curl_exit_code=$?
+          
+          # Check curl command success
+          if [ $curl_exit_code -ne 0 ]; then
+            echo "⚠️  curl command failed with exit code $curl_exit_code"
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "⏳ Waiting ${RETRY_DELAY}s before retry..."
+              sleep $RETRY_DELAY
+            fi
+            continue
+          fi
+          
+          # Extract HTTP code and response body
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | head -n-1)
+          
+          echo "📡 HTTP Status: $http_code"
+          
+          # Check for successful authentication
+          if [ "$http_code" = "200" ]; then
+            # Extract token (remove quotes)
+            token=$(echo "$body" | sed -e 's/^"//' -e 's/"$//')
+            
+            # Validate token format (should be JWT-like)
+            if [ -n "$token" ] && [ ${#token} -gt 50 ]; then
+              echo "token=$token" >> $GITHUB_OUTPUT
+              echo "status=success" >> $GITHUB_OUTPUT
+              echo "✅ Authentication successful!"
+              echo "🎫 Token length: ${#token} characters"
+              AUTH_SUCCESS=true
+              break
+            else
+              echo "⚠️  Received invalid token format"
+              echo "Token preview: ${token:0:20}..."
+            fi
+          else
+            echo "⚠️  Authentication failed with HTTP $http_code"
+            echo "Response: $body"
+          fi
+          
+          RETRY_COUNT=$((RETRY_COUNT + 1))
+          
+          if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            echo "⏳ Waiting ${RETRY_DELAY}s before retry..."
+            sleep $RETRY_DELAY
+          fi
+        done
+        
+        if [ "$AUTH_SUCCESS" = false ]; then
+          echo ""
+          echo "❌ ERROR: Authentication failed after $MAX_RETRIES attempts"
+          echo "status=failed" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+
+    - name: Upload test results to Xray
+      id: upload
+      shell: bash
+      run: |
+        echo "📤 Uploading test results to Xray..."
+        
+        MAX_RETRIES=${{ inputs.max-retries }}
+        RETRY_DELAY=${{ inputs.retry-delay }}
+        RETRY_COUNT=0
+        UPLOAD_SUCCESS=false
+        
+        # Build Xray URL with query parameters
+        XRAY_URL="${{ inputs.xray-base-url }}/api/v2/import/execution/junit?projectKey=${{ inputs.project-key }}"
+        
+        # Add test plan key only if provided
+        if [ -n "${{ inputs.test-plan-key }}" ]; then
+          echo "📋 Linking to test plan: ${{ inputs.test-plan-key }}"
+          XRAY_URL="${XRAY_URL}&testPlanKey=${{ inputs.test-plan-key }}"
+        fi
+        
+        echo "🔗 Upload URL: $XRAY_URL"
+        echo "📄 Report: ${{ inputs.report-path }}"
+        
+        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+          ATTEMPT=$((RETRY_COUNT + 1))
+          echo ""
+          echo "🔄 Upload attempt $ATTEMPT of $MAX_RETRIES..."
+          
+          # Debug: Show exact URL
+          echo "🔍 Debug - Exact URL being called:"
+          echo "$XRAY_URL" | cat -A  # Show hidden characters
+          
+          # Make upload request with verbose error output
+          response=$(curl -s -w "\n%{http_code}" -o /tmp/xray_response_$$.json -L -X POST \
+            "$XRAY_URL" \
+            -H "Content-Type: text/xml" \
+            -H "Authorization: Bearer ${{ steps.auth.outputs.token }}" \
+            --data-binary "@${{ inputs.report-path }}" \
+            --max-time 30 \
+            2>&1)
+          
+          curl_exit_code=$?
+          
+          # Check curl command success
+          if [ $curl_exit_code -ne 0 ]; then
+            echo "❌ curl command failed with exit code $curl_exit_code"
+            echo ""
+            echo "🔍 Debugging information:"
+            echo "   - URL: $XRAY_URL"
+            echo "   - Report path: ${{ inputs.report-path }}"
+            echo "   - Report exists: $([ -f '${{ inputs.report-path }}' ] && echo 'YES' || echo 'NO')"
+            echo "   - Report size: $([ -f '${{ inputs.report-path }}' ] && wc -c < '${{ inputs.report-path }}' || echo '0') bytes"
+            echo "   - Token length: ${#{{ steps.auth.outputs.token }}} characters"
+            echo ""
+            echo "💡 Common curl exit codes:"
+            echo "   - Code 3: Malformed URL"
+            echo "   - Code 6: Could not resolve host"
+            echo "   - Code 7: Failed to connect to host"
+            echo "   - Code 28: Connection timeout"
+            echo "   - Code 35: SSL connection error"
+            echo ""
+            
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "⏳ Waiting ${RETRY_DELAY}s before retry..."
+              sleep $RETRY_DELAY
+            fi
+            continue
+          fi
+          
+          # Extract HTTP code
+          http_code=$(echo "$response" | tail -n1)
+          
+          echo "📡 HTTP Status: $http_code"
+          
+          # Check for successful upload
+          if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+            echo "✅ Upload successful! (HTTP $http_code)"
+            
+            # Parse response
+            if [ -f /tmp/xray_response_$$.json ]; then
+              echo ""
+              echo "📋 Xray Response:"
+              cat /tmp/xray_response_$$.json | jq '.' 2>/dev/null || cat /tmp/xray_response_$$.json
+              echo ""
+              
+              # Try to extract test execution key (multiple possible JSON paths)
+              execution_key=$(cat /tmp/xray_response_$$.json | jq -r '.key // .testExecIssue.key // empty' 2>/dev/null || echo "")
+              execution_id=$(cat /tmp/xray_response_$$.json | jq -r '.id // .testExecIssue.id // empty' 2>/dev/null || echo "")
+              
+              if [ -n "$execution_key" ]; then
+                echo "execution_key=$execution_key" >> $GITHUB_OUTPUT
+                echo "🎯 Test Execution Key: $execution_key"
+              else
+                echo "⚠️  Could not extract execution key from response"
+                echo "execution_key=N/A" >> $GITHUB_OUTPUT
+              fi
+              
+              if [ -n "$execution_id" ]; then
+                echo "execution_id=$execution_id" >> $GITHUB_OUTPUT
+                echo "🆔 Test Execution ID: $execution_id"
+              fi
+              
+              # Copy response for artifact
+              cp /tmp/xray_response_$$.json /tmp/xray_response.json 2>/dev/null || true
+            fi
+            
+            echo "status=success" >> $GITHUB_OUTPUT
+            UPLOAD_SUCCESS=true
+            break
+          else
+            echo "⚠️  Upload failed with HTTP $http_code"
+            
+            if [ -f /tmp/xray_response_$$.json ]; then
+              echo "Error response:"
+              cat /tmp/xray_response_$$.json
+            fi
+          fi
+          
+          RETRY_COUNT=$((RETRY_COUNT + 1))
+          
+          if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+            # Exponential backoff
+            WAIT_TIME=$((RETRY_DELAY * ATTEMPT))
+            echo "⏳ Waiting ${WAIT_TIME}s before retry (exponential backoff)..."
+            sleep $WAIT_TIME
+          fi
+        done
+        
+        # Cleanup temp file
+        rm -f /tmp/xray_response_$$.json
+        
+        if [ "$UPLOAD_SUCCESS" = false ]; then
+          echo ""
+          echo "❌ ERROR: Upload failed after $MAX_RETRIES attempts"
+          echo "status=failed" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+
+    - name: Summary
+      if: always()
+      shell: bash
+      run: |
+        echo ""
+        echo "═══════════════════════════════════════════════════════════"
+        echo "📊 Xray Sync Summary"
+        echo "═══════════════════════════════════════════════════════════"
+        echo "🔐 Authentication: ${{ steps.auth.outputs.status }}"
+        echo "📤 Upload: ${{ steps.upload.outputs.status }}"
+        if [ "${{ steps.upload.outputs.execution_key }}" != "" ] && [ "${{ steps.upload.outputs.execution_key }}" != "N/A" ]; then
+          echo "🎯 Test Execution: ${{ steps.upload.outputs.execution_key }}"
+          echo "🔗 View: ${{ inputs.xray-base-url }}/testexec/${{ steps.upload.outputs.execution_key }}"
+        fi
+        echo "═══════════════════════════════════════════════════════════"
+
+branding:
+  icon: 'check-circle'
+  color: 'green'

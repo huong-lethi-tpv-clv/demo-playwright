@@ -12,7 +12,7 @@
     "test:chromium": "yarn bddgen && playwright test --project=chromium",
     "test:parallel": "yarn bddgen && playwright test --workers=2",
     "test:tags": "yarn bddgen && playwright test --grep",
-    "test:headedpo": "yarn bddgen && playwright test --headed --grep",
+    "test:headedgrep": "yarn bddgen && playwright test --headed --grep",
     "test:codegen": "playwright codegen",
     "test:report": "playwright show-report reports/playwright-html-report",
     "report": "playwright show-report reports/playwright-html-report",

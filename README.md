@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # APM E2E Playwright
 
 End-to-end test suite for APM using **Playwright Test**, **playwright-bdd**, and **TypeScript**.
@@ -306,3 +307,6 @@ yarn report
 - Chromium is the current local execution project.
 - Firefox and WebKit are not enabled in `playwright.config.ts`.
 - Do not commit generated `.features-gen`, auth storage, reports, screenshots, videos, or Allure output.
+=======
+# demo-playwright
+>>>>>>> 4d7ae027b7ef8016108d2eeb1dde949af1452de6
